@@ -1,9 +1,12 @@
 import SwiftUI
 
+/// Cover art loaded through the host. Takes the store explicitly rather than from the environment:
+/// macOS Table cells are hosted in their own NSHostingViews and do not reliably carry an
+/// `@Observable` environment value, which crashed with "No Observable object of type LibraryStore".
 struct CoverImage: View {
+    let store: LibraryStore
     let pictureId: String?
     var size: Int = 80
-    @Environment(LibraryStore.self) private var store
     @State private var image: NSImage?
 
     var body: some View {
@@ -118,7 +121,7 @@ struct QueueRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            CoverImage(pictureId: item.pictureId, size: 80)
+            CoverImage(store: store, pictureId: item.pictureId, size: 80)
                 .frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 5))
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title ?? item.asin).font(.callout).fontWeight(.medium).lineLimit(1)

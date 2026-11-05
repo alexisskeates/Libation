@@ -44,6 +44,7 @@ struct ContentView: View {
                 }
             }
             .inspectorColumnWidth(min: 300, ideal: 360, max: 560)
+            .environment(store)   // inspector content is hosted separately; do not rely on inheritance
         }
         .onChange(of: selection) { _, sel in store.detailsAsin = sel.count == 1 ? sel.first : nil }
         .onChange(of: store.queue.items.count) { old, new in if new > old { inspectorTab = .queue; showQueue = true } }
@@ -56,7 +57,7 @@ struct ContentView: View {
             Text(a.message)
         }
         .sheet(item: Binding(get: { store.loginSession }, set: { if $0 == nil { store.cancelLogin() } })) { session in
-            LoginWebSheet(session: session)
+            LoginWebSheet(session: session).environment(store)
         }
         .onAppear { if store.client == nil { store.connect() } }
     }
@@ -65,7 +66,7 @@ struct ContentView: View {
         @Bindable var store = store
         return Table(store.visibleBooks, selection: $selection, sortOrder: $store.sortOrder) {
             TableColumn("") { book in
-                CoverImage(pictureId: book.pictureId, size: 80)
+                CoverImage(store: store, pictureId: book.pictureId, size: 80)
                     .frame(width: 36, height: 36).clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .width(44)

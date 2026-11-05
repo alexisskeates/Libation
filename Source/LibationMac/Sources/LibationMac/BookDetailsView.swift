@@ -42,7 +42,7 @@ struct BookDetailsView: View {
 
     private func header(_ d: BookDetails) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            CoverImage(pictureId: d.book.pictureId, size: 300)
+            CoverImage(store: store, pictureId: d.book.pictureId, size: 300)
                 .frame(width: 110, height: 110).clipShape(RoundedRectangle(cornerRadius: 8))
                 .shadow(radius: 2, y: 1)
             VStack(alignment: .leading, spacing: 4) {
