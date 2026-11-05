@@ -240,6 +240,14 @@ app.MapPost("/api/scan", (ScanRequest? req) =>
 });
 app.MapGet("/api/scan", () => scan);
 
+app.MapGet("/api/settings", () => SettingsApi.GetAll(Configuration.Instance));
+app.MapPut("/api/settings", (JsonElement body) =>
+{
+	var errors = SettingsApi.Apply(Configuration.Instance, body);
+	hub.Publish("settings", new { changed = body.EnumerateObject().Select(e => e.Name).ToArray(), errors });
+	return errors.Count == 0 ? Results.Ok(SettingsApi.GetAll(Configuration.Instance)) : Results.BadRequest(new { errors, settings = SettingsApi.GetAll(Configuration.Instance) });
+});
+
 app.MapGet("/api/queue", () => queue.Snapshot());
 app.MapPost("/api/queue/liberate", async (LiberateRequest req) =>
 {

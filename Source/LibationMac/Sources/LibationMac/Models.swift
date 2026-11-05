@@ -189,3 +189,48 @@ extension JSONDecoder {
         return decoder
     }()
 }
+
+struct SettingOption: Codable, Hashable, Identifiable {
+    var id: String { value }
+    var value: String
+    var label: String
+}
+
+/// Loosely typed setting value, as the host serialises Configuration properties.
+enum SettingValue: Codable, Hashable {
+    case bool(Bool), int(Int64), float(Double), string(String), null
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+        else if let i = try? c.decode(Int64.self) { self = .int(i) }
+        else if let d = try? c.decode(Double.self) { self = .float(d) }
+        else { self = .string(try c.decode(String.self)) }
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .bool(let b): try c.encode(b)
+        case .int(let i): try c.encode(i)
+        case .float(let d): try c.encode(d)
+        case .string(let s): try c.encode(s)
+        case .null: try c.encodeNil()
+        }
+    }
+    var boolValue: Bool { if case .bool(let b) = self { return b }; return false }
+    var intValue: Int64 { switch self { case .int(let i): return i; case .float(let d): return Int64(d); default: return 0 } }
+    var doubleValue: Double { switch self { case .float(let d): return d; case .int(let i): return Double(i); default: return 0 } }
+    var stringValue: String { switch self { case .string(let s): return s; case .int(let i): return String(i); case .float(let d): return String(d); case .bool(let b): return String(b); case .null: return "" } }
+}
+
+struct Setting: Codable, Identifiable, Hashable {
+    var id: String { name }
+    var name: String
+    var group: String
+    var type: String   // bool | int | float | enum | path | string | secret
+    var value: SettingValue
+    var description: String
+    var help: String
+    var options: [SettingOption]?
+}

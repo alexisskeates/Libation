@@ -44,26 +44,3 @@ struct LibationMacApp: App {
     }
 }
 
-struct SettingsView: View {
-    @Environment(LibraryStore.self) private var store
-    var body: some View {
-        Form {
-            if let s = store.status {
-                LabeledContent("Libation files", value: s.libationFiles)
-                LabeledContent("Books folder", value: s.booksDirectory ?? "—")
-                LabeledContent("Core version", value: s.version)
-            }
-            if let c = store.client {
-                LabeledContent("Host", value: c.baseURL.absoluteString)
-            }
-            LabeledContent("Host log") {
-                Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([HostProcess.shared.logURL]) }
-            }
-            Text("Settings are still edited in Libation's own Settings.json for now.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .formStyle(.grouped)
-        .frame(width: 520)
-        .padding()
-    }
-}

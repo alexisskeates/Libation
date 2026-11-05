@@ -13,7 +13,9 @@ three front ends are interchangeable. See `docs/development/native-macos-ui-plan
 - Scan, Liberate selected / all pending, core alerts surfaced as native alerts
 - Accounts window (⌘⇧A): add / rename / toggle scan / delete; Audible sign-in in a private WKWebView
   (device user-agent, seeded cookies, `/ap/maplanding` capture) with a paste-the-URL fallback
-- Not yet: settings editing, book details, series grouping, tags/ratings editing
+- Settings (⌘,): every Configuration setting the other front ends expose, in the same five tabs,
+  rendered from the host's description of each (type, options, help); saves immediately
+- Not yet: book details, series grouping, tags/ratings editing, naming-template editor, token-storage conversion
 
 ## Develop
 
@@ -53,10 +55,11 @@ Host stderr goes to `~/Library/Logs/Libation/LibationHost.log`; Libation's own l
 | GET | `locales` | Audible marketplaces |
 | GET | `login` · POST `login/{id}/complete` `{responseUrl}` · POST `login/{id}/cancel` | browser sign-in handshake; session arrives as a `login` event |
 | POST / GET | `scan` | `{accounts:[...]}` optional; progress via `scan` events |
+| GET / PUT | `settings` | all settings with type/group/options/help; PUT `{Name: value, …}` returns per-field errors |
 | GET | `queue` | snapshot |
 | POST | `queue/liberate` | `{asins:[...]}` |
 | POST | `queue/cancel` · `queue/{asin}/cancel` | |
-| GET | `events` | SSE: `hello`, `queue`, `scan`, `library`, `alert`, `log`, `login`, `signin` |
+| GET | `events` | SSE: `hello`, `queue`, `scan`, `library`, `alert`, `log`, `login`, `signin`, `settings` |
 | POST | `shutdown` | |
 
 ## Ship

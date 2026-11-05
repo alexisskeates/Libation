@@ -106,6 +106,11 @@ final class HostClient: @unchecked Sendable {
     }
     func cancelLogin(_ id: String) async { _ = try? await session.data(for: request("api/login/\(id)/cancel", method: "POST")) }
 
+    func settings() async throws -> [Setting] { try await send(request("api/settings"), as: [Setting].self) }
+    func updateSettings(_ changes: [String: SettingValue]) async throws -> [Setting] {
+        try await send(request("api/settings", method: "PUT", body: changes), as: [Setting].self)
+    }
+
     func shutdown() async {
         _ = try? await session.data(for: request("api/shutdown", method: "POST"))
     }

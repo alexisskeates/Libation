@@ -18,6 +18,8 @@ final class LibraryStore {
     var loginSession: LoginSession?
     var signInResults: [SignInResult] = []
     var signingIn: Set<String> = []
+    var settings: [Setting] = []
+    var settingsError: String?
     var lastError: String?
     var searchText = "" { didSet { scheduleSearch() } }
     var sortOrder: [KeyPathComparator<Book>] = [KeyPathComparator(\Book.dateAdded, order: .reverse)]
@@ -110,6 +112,28 @@ final class LibraryStore {
 
     func dismissAlert() { if !alerts.isEmpty { alerts.removeFirst() } }
     func dismissSignInResult() { if !signInResults.isEmpty { signInResults.removeFirst() } }
+
+    // MARK: Settings
+
+    func loadSettings() async {
+        guard let client else { return }
+        do { settings = try await client.settings(); settingsError = nil } catch { settingsError = error.localizedDescription }
+    }
+
+    func setSetting(_ name: String, _ value: SettingValue) {
+        guard let client else { return }
+        if let i = settings.firstIndex(where: { $0.name == name }) { settings[i].value = value }   // optimistic
+        Task {
+            do {
+                settings = try await client.updateSettings([name: value])
+                settingsError = nil
+                if name == "Books" { status = try await client.status() }
+            } catch {
+                settingsError = error.localizedDescription
+                await loadSettings()
+            }
+        }
+    }
 
     private struct LoginClosed: Decodable { var id: String; var closed: Bool }
 
