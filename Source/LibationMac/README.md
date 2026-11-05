@@ -15,7 +15,11 @@ three front ends are interchangeable. See `docs/development/native-macos-ui-plan
   (device user-agent, seeded cookies, `/ap/maplanding` capture) with a paste-the-URL fallback
 - Settings (⌘,): every Configuration setting the other front ends expose, in the same five tabs,
   rendered from the host's description of each (type, options, help); saves immediately
-- Not yet: book details, series grouping, tags/ratings editing, naming-template editor, token-storage conversion
+- Details inspector (select a row or double-click): cover, metadata, description, editable my-rating,
+  tags, audiobook/PDF status overrides, Re-download, Show in Finder, Open in Audible, Remove
+- Context menu: Mark Downloaded / Download Pending, Remove from Library, Copy ASIN
+- Not yet: series grouping, trash bin / restore, naming-template editor, token-storage conversion,
+  bookmarks & clips, convert to MP3, locate file
 
 ## Develop
 
@@ -46,7 +50,10 @@ Host stderr goes to `~/Library/Logs/Libation/LibationHost.log`; Libation's own l
 | Method | Path | Notes |
 |---|---|---|
 | GET | `status` | version, LibationFiles, Books dir, counts |
-| GET | `library` · `library/{asin}` | flattened `LibraryBook` rows |
+| GET | `library` | flattened `LibraryBook` rows |
+| GET | `library/{asin}` | row plus categories, Audible URL, PDF flag, liberated file path |
+| PUT | `library/user-item` | `{asins, tags?, bookStatus?, pdfStatus?, rating?}` — null fields untouched |
+| POST | `library/remove` | `{asins}` → Libation trash bin |
 | GET | `search?q=` | Lucene query → ASINs |
 | GET | `covers/{pictureId}?size=80\|300\|500` | JPEG, downloads on demand |
 | GET / POST | `accounts` | list; add `{accountId, locale, accountName?, libraryScan}` |

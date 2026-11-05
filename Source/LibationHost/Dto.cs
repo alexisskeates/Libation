@@ -141,3 +141,24 @@ public record StatusDto(string Version, string LibationFiles, string? BooksDirec
 
 public record LiberateRequest(string[] Asins);
 public record ScanRequest(string[]? Accounts);
+
+public record BookDetailsDto(BookDto Book, IReadOnlyList<string> Categories, string AudibleUrl, bool HasPdf, string? FilePath)
+{
+	public static BookDetailsDto From(LibraryBook lb)
+	{
+		var locale = AudibleApi.Localization.Get(lb.Book.Locale);
+		var domain = string.IsNullOrEmpty(locale.TopDomain) ? "com" : locale.TopDomain;
+		string? path = null;
+		try { path = lb.Book.AudioExists ? LibationFileManager.AudibleFileStorage.Audio.GetPath(lb.Book.AudibleProductId)?.PathWithoutPrefix : null; }
+		catch (Exception ex) { Serilog.Log.Logger.Debug(ex, "No file path for {Asin}", lb.Book.AudibleProductId); }
+		return new BookDetailsDto(
+			BookDto.From(lb),
+			lb.Book.LowestCategoryNames().Where(c => !string.IsNullOrWhiteSpace(c)).ToList(),
+			$"https://www.audible.{domain}/pd/{lb.Book.AudibleProductId}",
+			lb.Book.HasPdf,
+			path);
+	}
+}
+
+public record UserItemUpdateRequest(string[] Asins, string? Tags, string? BookStatus, string? PdfStatus, RatingDto? Rating);
+public record AsinsRequest(string[] Asins);

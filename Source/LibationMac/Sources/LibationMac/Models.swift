@@ -234,3 +234,11 @@ struct Setting: Codable, Identifiable, Hashable {
     var help: String
     var options: [SettingOption]?
 }
+
+struct BookDetails: Codable, Hashable {
+    var book: Book
+    var categories: [String]
+    var audibleUrl: String
+    var hasPdf: Bool
+    var filePath: String?
+}

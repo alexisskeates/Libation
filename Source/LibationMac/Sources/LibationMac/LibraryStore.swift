@@ -19,6 +19,8 @@ final class LibraryStore {
     var signInResults: [SignInResult] = []
     var signingIn: Set<String> = []
     var settings: [Setting] = []
+    var detailsAsin: String? { didSet { if detailsAsin != oldValue { details = nil; Task { await loadDetails() } } } }
+    var details: BookDetails?
     var settingsError: String?
     var lastError: String?
     var searchText = "" { didSet { scheduleSearch() } }
@@ -113,6 +115,38 @@ final class LibraryStore {
     func dismissAlert() { if !alerts.isEmpty { alerts.removeFirst() } }
     func dismissSignInResult() { if !signInResults.isEmpty { signInResults.removeFirst() } }
 
+    // MARK: Book details
+
+    func loadDetails() async {
+        guard let client, let asin = detailsAsin else { details = nil; return }
+        do {
+            let d = try await client.details(asin)
+            if detailsAsin == asin { details = d }
+        } catch { lastError = error.localizedDescription }
+    }
+
+    func updateUserItem(asins: [String], tags: String? = nil, bookStatus: String? = nil, pdfStatus: String? = nil, rating: Rating? = nil) {
+        guard let client, !asins.isEmpty else { return }
+        Task {
+            do {
+                let r = try await client.updateUserItem(asins: asins, tags: tags, bookStatus: bookStatus, pdfStatus: pdfStatus, rating: rating)
+                for b in r.books { if let i = books.firstIndex(where: { $0.asin == b.asin }) { books[i] = b } }
+                if let asin = detailsAsin, r.books.contains(where: { $0.asin == asin }) { await loadDetails() }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    func remove(asins: [String]) {
+        guard let client, !asins.isEmpty else { return }
+        Task {
+            do {
+                try await client.remove(asins: asins)
+                if let asin = detailsAsin, asins.contains(asin) { detailsAsin = nil }
+                await reload()
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     // MARK: Settings
 
     func loadSettings() async {
@@ -205,6 +239,7 @@ final class LibraryStore {
             books = try await client.library()
             status = try await client.status()
             if searchMatches != nil { await runSearch() }
+            if detailsAsin != nil { await loadDetails() }
         } catch { lastError = error.localizedDescription }
     }
 

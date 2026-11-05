@@ -111,6 +111,17 @@ final class HostClient: @unchecked Sendable {
         try await send(request("api/settings", method: "PUT", body: changes), as: [Setting].self)
     }
 
+    func details(_ asin: String) async throws -> BookDetails { try await send(request("api/library/\(asin)"), as: BookDetails.self) }
+    struct UserItemResponse: Decodable { var changed: Int; var books: [Book] }
+    func updateUserItem(asins: [String], tags: String? = nil, bookStatus: String? = nil, pdfStatus: String? = nil, rating: Rating? = nil) async throws -> UserItemResponse {
+        struct Body: Encodable { var asins: [String]; var tags: String?; var bookStatus: String?; var pdfStatus: String?; var rating: Rating? }
+        return try await send(request("api/library/user-item", method: "PUT", body: Body(asins: asins, tags: tags, bookStatus: bookStatus, pdfStatus: pdfStatus, rating: rating)), as: UserItemResponse.self)
+    }
+    func remove(asins: [String]) async throws {
+        struct R: Decodable { var removed: Int }
+        _ = try await send(request("api/library/remove", method: "POST", body: ["asins": asins]), as: R.self)
+    }
+
     func shutdown() async {
         _ = try? await session.data(for: request("api/shutdown", method: "POST"))
     }

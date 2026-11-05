@@ -4,6 +4,8 @@ struct ContentView: View {
     @Environment(LibraryStore.self) private var store
     @State private var selection = Set<String>()
     @State private var showQueue = true
+    @State private var inspectorTab: InspectorTab = .details
+    enum InspectorTab: String, CaseIterable { case details = "Details", queue = "Queue" }
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -30,8 +32,21 @@ struct ContentView: View {
             }
         }
         .inspector(isPresented: $showQueue) {
-            QueueView().inspectorColumnWidth(min: 280, ideal: 340, max: 520)
+            VStack(spacing: 0) {
+                Picker("", selection: $inspectorTab) {
+                    ForEach(InspectorTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden().padding(8)
+                Divider()
+                switch inspectorTab {
+                case .details: BookDetailsView()
+                case .queue: QueueView()
+                }
+            }
+            .inspectorColumnWidth(min: 300, ideal: 360, max: 560)
         }
+        .onChange(of: selection) { _, sel in store.detailsAsin = sel.count == 1 ? sel.first : nil }
+        .onChange(of: store.queue.items.count) { old, new in if new > old { inspectorTab = .queue; showQueue = true } }
         .searchable(text: $store.searchText, placement: .toolbar, prompt: "Search — Libation syntax works (e.g. -liberated)")
         .toolbar { toolbar }
         .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
@@ -76,6 +91,13 @@ struct ContentView: View {
         .contextMenu(forSelectionType: String.self) { ids in
             let chosen = ids.isEmpty ? selection : ids
             Button("Liberate") { store.liberate(Array(chosen)) }
+            Button("Show Details") { if let one = chosen.first { selection = [one]; inspectorTab = .details; showQueue = true } }
+            Divider()
+            Button("Mark as Downloaded") { store.updateUserItem(asins: Array(chosen), bookStatus: "Liberated") }
+            Button("Mark as Download Pending") { store.updateUserItem(asins: Array(chosen), bookStatus: "NotLiberated") }
+            Divider()
+            Button("Remove from Library", role: .destructive) { store.remove(asins: Array(chosen)) }
+            Divider()
             Button("Copy ASIN") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(chosen.sorted().joined(separator: "\n"), forType: .string)
@@ -85,7 +107,7 @@ struct ContentView: View {
                 for asin in chosen { NSWorkspace.shared.open(URL(string: "https://www.audible.co.uk/pd/\(asin)")!) }
             }
         } primaryAction: { ids in
-            store.liberate(Array(ids))
+            if let one = ids.first { selection = [one]; inspectorTab = .details; showQueue = true }
         }
     }
 

@@ -108,7 +108,30 @@ app.MapGet("/api/status", () => new StatusDto(
 app.MapGet("/api/library", () => Library().Select(BookDto.From).ToList());
 
 app.MapGet("/api/library/{asin}", (string asin) =>
-	DbContexts.GetLibraryBook_Flat_NoTracking(asin) is { } lb ? Results.Ok(BookDto.From(lb)) : Results.NotFound());
+	DbContexts.GetLibraryBook_Flat_NoTracking(asin) is { } lb ? Results.Ok(BookDetailsDto.From(lb)) : Results.NotFound());
+
+// Tags, liberated/PDF status overrides and my-rating, for one or many books. Null fields are left alone.
+app.MapPut("/api/library/user-item", async (UserItemUpdateRequest req) =>
+{
+	var wanted = req.Asins.ToHashSet(StringComparer.OrdinalIgnoreCase);
+	var books = Library().Where(lb => wanted.Contains(lb.Book.AudibleProductId)).ToList();
+	if (books.Count == 0) return Results.NotFound(new { error = "No matching books." });
+	LiberatedStatus? bookStatus = req.BookStatus is null ? null : Enum.Parse<LiberatedStatus>(req.BookStatus, true);
+	LiberatedStatus? pdfStatus = req.PdfStatus is null ? null : Enum.Parse<LiberatedStatus>(req.PdfStatus, true);
+	Rating? rating = req.Rating is null ? null : new Rating(req.Rating.Overall, req.Rating.Performance, req.Rating.Story);
+	var changed = await books.UpdateUserDefinedItemAsync(req.Tags, bookStatus, pdfStatus, rating);
+	return Results.Ok(new { changed, books = books.Select(b => b.Book.AudibleProductId).Select(a => BookDto.From(DbContexts.GetLibraryBook_Flat_NoTracking(a)!)).ToList() });
+});
+
+// Soft delete: books go to Libation's trash bin and can be restored from the other front ends.
+app.MapPost("/api/library/remove", async (AsinsRequest req) =>
+{
+	var wanted = req.Asins.ToHashSet(StringComparer.OrdinalIgnoreCase);
+	var books = Library().Where(lb => wanted.Contains(lb.Book.AudibleProductId)).ToList();
+	if (books.Count == 0) return Results.NotFound(new { error = "No matching books." });
+	var removed = await books.RemoveBooksAsync();
+	return Results.Ok(new { removed });
+});
 
 app.MapGet("/api/search", (string? q) =>
 {

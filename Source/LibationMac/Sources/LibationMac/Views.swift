@@ -46,6 +46,21 @@ struct StatusIcon: View {
     }
 }
 
+struct StarsEditor: View {
+    let value: Float
+    let onChange: (Float) -> Void
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { i in
+                Image(systemName: Float(i) <= value ? "star.fill" : "star")
+                    .foregroundStyle(value > 0 ? Color.yellow : Color.secondary.opacity(0.4))
+                    .onTapGesture { onChange(Float(i) == value ? 0 : Float(i)) }
+            }
+        }
+        .font(.callout)
+    }
+}
+
 struct Stars: View {
     let value: Float
     var body: some View {
