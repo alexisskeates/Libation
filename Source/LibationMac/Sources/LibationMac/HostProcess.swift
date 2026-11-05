@@ -33,7 +33,7 @@ final class HostProcess {
         let token = UUID().uuidString
         let proc = Process()
         proc.executableURL = exe
-        proc.arguments = ["--port", "0", "--token", token]
+        proc.arguments = ["--port", "0", "--token", token, "--parent", String(ProcessInfo.processInfo.processIdentifier)]
         var childEnv = env
         // The bundled host is self-contained; the repo's debug build is framework-dependent and
         // needs to find the SDK's runtime when launched from Finder/Xcode without a shell profile.

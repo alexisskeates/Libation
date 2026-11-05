@@ -74,4 +74,14 @@ Host stderr goes to `~/Library/Logs/Libation/LibationHost.log`; Libation's own l
 ```bash
 Source/LibationMac/build.sh           # publishes the host self-contained and bundles it into dist/Libation.app
 Source/LibationMac/build.sh install   # ...and copies to /Applications
+SKIP_HOST=1 Source/LibationMac/build.sh   # reuse the last host publish (fast iteration on the Swift side)
 ```
+
+The bundle is ~200 MB: the .NET host is self-contained (`osx-arm64` by default; set `RID=osx-x64`
+for Intel) so users need no .NET install. It is signed with the first "Developer ID Application"
+identity in your keychain, or ad-hoc if there is none; set `SIGN_IDENTITY` to choose. The
+hardened-runtime entitlements in `Packaging/entitlements.plist` are the standard set .NET needs
+(JIT, unsigned executable memory, no library validation). Notarisation is not wired up yet.
+
+The app uses the normal Libation folder (`~/Library/Application Support/Libation`) unless
+`LIBATION_FILES_DIR` is set, and holds the same single-instance lock as the other front ends.

@@ -15,10 +15,31 @@ using Microsoft.AspNetCore.Http.Json;
 // ---- arguments -------------------------------------------------------------
 int port = 0;
 string? token = null;
+int? parentPid = null;
 for (var i = 0; i < args.Length; i++)
 {
 	if (args[i] == "--port" && i + 1 < args.Length) port = int.Parse(args[++i]);
 	else if (args[i] == "--token" && i + 1 < args.Length) token = args[++i];
+	else if (args[i] == "--parent" && i + 1 < args.Length) parentPid = int.Parse(args[++i]);
+}
+
+// A front end that crashes or is killed never gets to call /api/shutdown, so the host watches its
+// parent and leaves with it rather than lingering as an orphan holding the LibationFiles lock.
+if (parentPid is int ppid)
+{
+	_ = Task.Run(async () =>
+	{
+		while (true)
+		{
+			await Task.Delay(TimeSpan.FromSeconds(2));
+			try { using var _ = System.Diagnostics.Process.GetProcessById(ppid); }
+			catch (ArgumentException)
+			{
+				Serilog.Log.Logger.Information("Parent process {Pid} is gone; shutting down", ppid);
+				Environment.Exit(0);
+			}
+		}
+	});
 }
 
 // ---- Libation bootstrap (mirrors LibationCli.Setup / LibationAvalonia.App) -----
