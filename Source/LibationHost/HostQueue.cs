@@ -53,13 +53,30 @@ public sealed class HostQueue
 		{
 			await Task.Delay(200);
 			Interlocked.Exchange(ref _pending, 0);
-			_hub.Publish("queue", Snapshot());
+			try
+			{
+				_hub.Publish("queue", Snapshot());
+			}
+			catch (Exception ex)
+			{
+				// Never let a failed snapshot leave the front end stale: log it and try again shortly.
+				Serilog.Log.Logger.Warning(ex, "Queue snapshot failed; rescheduling");
+				Schedule();
+			}
 		});
 	}
 
 	public QueueSnapshotDto Snapshot()
 	{
-		var items = Vm.Queue.GetAllItems().Select(QueueItemDto.From).ToList();
+		// The queue is mutated by book threads (an item moves from active to completed as it finishes).
+		// TrackedQueue's enumeration is not synchronised with that, so retry on a torn read rather than
+		// propagate "collection was modified" to a caller or lose the event.
+		List<QueueItemDto> items = null!;
+		for (var attempt = 0; ; attempt++)
+		{
+			try { items = Vm.Queue.GetAllItems().ToArray().Select(QueueItemDto.From).ToList(); break; }
+			catch (InvalidOperationException) when (attempt < 5) { Thread.Sleep(10); }
+		}
 		return new QueueSnapshotDto(
 			Running: Vm.Running,
 			QueuedCount: Vm.QueuedCount,

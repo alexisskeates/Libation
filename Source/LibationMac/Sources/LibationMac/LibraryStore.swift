@@ -56,6 +56,7 @@ final class LibraryStore {
                 connection = .connected
                 NSLog("LibationMac connected to %@: %d books, %d queued", c.baseURL.absoluteString, books.count, queue.items.count)
                 listen(c)
+                pollQueue(c)
             } catch {
                 NSLog("LibationMac connect failed: %@", error.localizedDescription)
                 connection = .failed(error.localizedDescription)
@@ -77,6 +78,20 @@ final class LibraryStore {
             } catch {
                 NSLog("LibationMac event stream failed: %@", error.localizedDescription)
                 connection = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Safety net under the SSE stream: while anything is in the queue, re-read it every few seconds so a
+    /// missed event can never leave a finished download looking queued.
+    private var pollTask: Task<Void, Never>?
+    private func pollQueue(_ c: HostClient) {
+        pollTask?.cancel()
+        pollTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(queue.items.isEmpty ? 15 : 4))
+                guard !Task.isCancelled, connection == .connected else { continue }
+                if let q = try? await c.queue(), q != queue { queue = q }
             }
         }
     }
