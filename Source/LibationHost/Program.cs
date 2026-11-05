@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ApplicationServices;
 using AppScaffolding;
+using AudibleApi;
 using AudibleUtilities;
 using DataLayer;
 using LibationFileManager;
@@ -51,6 +52,8 @@ var hub = new EventHub(json);
 // View models marshal notifications through the captured context; give them an ordered one.
 SynchronizationContext.SetSynchronizationContext(new HostSyncContext());
 var queue = new HostQueue(hub);
+var login = new LoginBroker(hub);
+ApiExtended.LoginChoiceFactory = login.ChoiceFor;
 
 // Dialogs the core wants to show become "alert" events; the front end renders them. Modal
 // questions are answered with their first button for now.
@@ -127,28 +130,103 @@ app.MapGet("/api/covers/{pictureId}", (string pictureId, int? size, Cancellation
 app.MapGet("/api/accounts", () =>
 {
 	using var persister = AudibleApiStorage.GetAccountsSettingsPersister();
-	return persister.AccountsSettings.GetAll()
-		.Select(a => new AccountDto(a.AccountId, a.AccountName, a.Locale?.Name, a.LibraryScan)).ToList();
+	return persister.AccountsSettings.GetAll().Select(AccountDto.From).ToList();
 });
+
+app.MapGet("/api/locales", () => Localization.Locales
+	.OrderBy(l => l.Name)
+	.Select(l => new LocaleDto(l.Name, l.CountryCode, l.WithUsername)).ToList());
+
+static Locale ResolveLocale(string input)
+{
+	var fromGet = Localization.Get(input);
+	if (!string.IsNullOrEmpty(fromGet.CountryCode)) return fromGet;
+	return Localization.Locales
+		.Where(l => l.CountryCode.Equals(input, StringComparison.OrdinalIgnoreCase) || l.Name.Equals(input, StringComparison.OrdinalIgnoreCase))
+		.OrderBy(l => l.WithUsername)
+		.FirstOrDefault() ?? Locale.Empty;
+}
+
+app.MapPost("/api/accounts", (AddAccountRequest req) =>
+{
+	var id = req.AccountId?.Trim();
+	if (string.IsNullOrEmpty(id)) return Results.BadRequest(new { error = "Account id is required." });
+	var locale = ResolveLocale(req.Locale ?? "");
+	if (string.IsNullOrEmpty(locale.CountryCode)) return Results.BadRequest(new { error = $"Unknown locale '{req.Locale}'." });
+	using var persister = AudibleApiStorage.GetAccountsSettingsPersister();
+	// Any edit through the persister is written to disk immediately, as in the GUI.
+	var account = persister.AccountsSettings.Upsert(id, locale.Name);
+	account.LibraryScan = req.LibraryScan;
+	account.AccountName = string.IsNullOrWhiteSpace(req.AccountName) ? $"{id} - {locale.Name}" : req.AccountName.Trim();
+	return Results.Ok(AccountDto.From(account));
+});
+
+app.MapPut("/api/accounts/{accountId}/{locale}", (string accountId, string locale, UpdateAccountRequest req) =>
+{
+	using var persister = AudibleApiStorage.GetAccountsSettingsPersister();
+	var account = persister.AccountsSettings.GetAccount(accountId, locale);
+	if (account is null) return Results.NotFound();
+	if (req.LibraryScan is bool scanFlag) account.LibraryScan = scanFlag;
+	if (!string.IsNullOrWhiteSpace(req.AccountName)) account.AccountName = req.AccountName.Trim();
+	return Results.Ok(AccountDto.From(account));
+});
+
+app.MapDelete("/api/accounts/{accountId}/{locale}", (string accountId, string locale) =>
+{
+	using var persister = AudibleApiStorage.GetAccountsSettingsPersister();
+	return persister.AccountsSettings.Delete(accountId, locale) ? Results.NoContent() : Results.NotFound();
+});
+
+// Sign in (or re-validate) one account. Stored tokens are tried first; if they cannot be used the
+// LoginBroker asks the front end to run the browser flow. Outcome arrives as a "signin" event.
+app.MapPost("/api/accounts/{accountId}/{locale}/signin", (string accountId, string locale) =>
+{
+	using (var check = AudibleApiStorage.GetAccountsSettingsPersister())
+		if (check.AccountsSettings.GetAccount(accountId, locale) is null) return Results.NotFound();
+
+	_ = Task.Run(async () =>
+	{
+		SignInResultDto result;
+		try
+		{
+			// Hold the persister for the whole sign-in, as the CLI does, so the refreshed tokens land in the file.
+			using var persister = AudibleApiStorage.GetAccountsSettingsPersister();
+			var account = persister.AccountsSettings.GetAccount(accountId, locale)!;
+			await ApiExtended.CreateAsync(account, allowInteractiveLogin: true);
+			result = new(accountId, locale, true, null);
+		}
+		catch (Exception ex)
+		{
+			Serilog.Log.Logger.Error(ex, "Sign-in failed");
+			result = new(accountId, locale, false, ex.Message);
+		}
+		hub.Publish("signin", result);
+	});
+	return Results.Accepted();
+});
+
+app.MapGet("/api/login", () => login.Pending.ToList());
+app.MapPost("/api/login/{id}/complete", (string id, CompleteLoginRequest req) =>
+	login.Complete(id, req.ResponseUrl) ? Results.Ok() : Results.NotFound(new { error = "No such login session, or invalid URL." }));
+app.MapPost("/api/login/{id}/cancel", (string id) => login.Cancel(id) ? Results.Ok() : Results.NotFound());
 
 app.MapPost("/api/scan", (ScanRequest? req) =>
 {
 	if (scan.Scanning) return Results.Conflict(scan);
-	Account[] accounts;
-	using (var persister = AudibleApiStorage.GetAccountsSettingsPersister())
-	{
-		var all = persister.AccountsSettings.GetAll();
-		accounts = req?.Accounts is { Length: > 0 } names
-			? all.Where(a => names.Contains(a.AccountId, StringComparer.OrdinalIgnoreCase) || names.Contains(a.AccountName ?? "", StringComparer.OrdinalIgnoreCase)).ToArray()
-			: all.Where(a => a.LibraryScan).ToArray();
-	}
-	if (accounts.Length == 0) return Results.BadRequest(new { error = "No accounts to scan." });
+	var persister = AudibleApiStorage.GetAccountsSettingsPersister();
+	var all = persister.AccountsSettings.GetAll();
+	var accounts = req?.Accounts is { Length: > 0 } names
+		? all.Where(a => names.Contains(a.AccountId, StringComparer.OrdinalIgnoreCase) || names.Contains(a.AccountName ?? "", StringComparer.OrdinalIgnoreCase)).ToArray()
+		: all.Where(a => a.LibraryScan).ToArray();
+	if (accounts.Length == 0) { persister.Dispose(); return Results.BadRequest(new { error = "No accounts to scan." }); }
 
 	_ = Task.Run(async () =>
 	{
+		// Persister stays open for the scan so refreshed tokens are persisted, as in the GUI and CLI.
+		using var _ = persister;
 		try
 		{
-			var (total, added) = await LibraryCommands.ImportAccountAsync(accounts, allowInteractiveLogin: false);
+			var (total, added) = await LibraryCommands.ImportAccountAsync(accounts, allowInteractiveLogin: true);
 			scan = new(false, total, added, null);
 		}
 		catch (Exception ex)

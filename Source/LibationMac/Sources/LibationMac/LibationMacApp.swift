@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct LibationMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = LibraryStore()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         WindowGroup("Libation") {
@@ -29,7 +30,14 @@ struct LibationMacApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Reload Library") { Task { await store.reload() } }.keyboardShortcut("r")
             }
+            CommandGroup(after: .windowList) {
+                Button("Accounts…") { openWindow(id: "accounts") }.keyboardShortcut("a", modifiers: [.command, .shift])
+            }
         }
+        Window("Accounts", id: "accounts") {
+            AccountsView().environment(store)
+        }
+        .defaultSize(width: 640, height: 420)
         Settings {
             SettingsView().environment(store)
         }

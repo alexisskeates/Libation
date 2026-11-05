@@ -4,6 +4,7 @@ struct ContentView: View {
     @Environment(LibraryStore.self) private var store
     @State private var selection = Set<String>()
     @State private var showQueue = true
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var store = store
@@ -38,6 +39,9 @@ struct ContentView: View {
             Button("OK") { store.dismissAlert() }
         } message: { a in
             Text(a.message)
+        }
+        .sheet(item: Binding(get: { store.loginSession }, set: { if $0 == nil { store.cancelLogin() } })) { session in
+            LoginWebSheet(session: session)
         }
         .onAppear { if store.client == nil { store.connect() } }
     }
@@ -103,6 +107,13 @@ struct ContentView: View {
             }
             .help(selection.isEmpty ? "Download and decrypt every pending title" : "Download and decrypt the selected titles")
             .disabled(store.connection != .connected || (selection.isEmpty && store.pendingBooks.isEmpty))
+
+            Button {
+                openWindow(id: "accounts")
+            } label: {
+                Label("Accounts", systemImage: "person.crop.circle")
+            }
+            .help("Manage Audible accounts and sign in")
 
             Button {
                 showQueue.toggle()

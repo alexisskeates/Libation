@@ -79,6 +79,33 @@ final class HostClient: @unchecked Sendable {
     func scan(accounts: [String]? = nil) async throws -> ScanState {
         try await send(request("api/scan", method: "POST", body: ["accounts": accounts ?? []]), as: ScanState.self)
     }
+    func locales() async throws -> [LocaleInfo] { try await send(request("api/locales"), as: [LocaleInfo].self) }
+    func addAccount(accountId: String, locale: String, accountName: String?, libraryScan: Bool) async throws -> Account {
+        struct Body: Encodable { var accountId: String; var locale: String; var accountName: String?; var libraryScan: Bool }
+        return try await send(request("api/accounts", method: "POST", body: Body(accountId: accountId, locale: locale, accountName: accountName, libraryScan: libraryScan)), as: Account.self)
+    }
+    func updateAccount(_ a: Account, accountName: String? = nil, libraryScan: Bool? = nil) async throws -> Account {
+        struct Body: Encodable { var accountName: String?; var libraryScan: Bool? }
+        return try await send(request("api/accounts/\(a.accountId)/\(a.locale ?? "")", method: "PUT", body: Body(accountName: accountName, libraryScan: libraryScan)), as: Account.self)
+    }
+    func deleteAccount(_ a: Account) async throws {
+        let (data, resp) = try await session.data(for: request("api/accounts/\(a.accountId)/\(a.locale ?? "")", method: "DELETE"))
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else { throw HostError.http(code, String(decoding: data, as: UTF8.self)) }
+    }
+    func signIn(_ a: Account) async throws {
+        let (data, resp) = try await session.data(for: request("api/accounts/\(a.accountId)/\(a.locale ?? "")/signin", method: "POST"))
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else { throw HostError.http(code, String(decoding: data, as: UTF8.self)) }
+    }
+    func pendingLogins() async throws -> [LoginSession] { try await send(request("api/login"), as: [LoginSession].self) }
+    func completeLogin(_ id: String, responseUrl: String) async throws {
+        let (data, resp) = try await session.data(for: request("api/login/\(id)/complete", method: "POST", body: ["responseUrl": responseUrl]))
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else { throw HostError.http(code, String(decoding: data, as: UTF8.self)) }
+    }
+    func cancelLogin(_ id: String) async { _ = try? await session.data(for: request("api/login/\(id)/cancel", method: "POST")) }
+
     func shutdown() async {
         _ = try? await session.data(for: request("api/shutdown", method: "POST"))
     }

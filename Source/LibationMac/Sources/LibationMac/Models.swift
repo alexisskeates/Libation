@@ -122,11 +122,45 @@ struct HostStatus: Codable, Hashable {
 }
 
 struct Account: Codable, Identifiable, Hashable {
-    var id: String { accountId + (locale ?? "") }
+    var id: String { accountId + "|" + (locale ?? "") }
     var accountId: String
     var accountName: String?
     var locale: String?
     var libraryScan: Bool
+    var additionalLocales: [String]
+    var hasTokens: Bool
+}
+
+struct LocaleInfo: Codable, Identifiable, Hashable {
+    var id: String { name }
+    var name: String
+    var countryCode: String
+    var withUsername: Bool
+}
+
+struct LoginCookie: Codable, Hashable {
+    var name: String
+    var value: String
+    var domain: String
+    var path: String
+    var secure: Bool
+}
+
+/// A browser sign-in the host is waiting on. Arrives as a "login" event.
+struct LoginSession: Codable, Identifiable, Hashable {
+    var id: String
+    var accountId: String
+    var locale: String?
+    var loginUrl: String
+    var userAgent: String
+    var cookies: [LoginCookie]
+}
+
+struct SignInResult: Codable, Hashable {
+    var accountId: String
+    var locale: String?
+    var ok: Bool
+    var error: String?
 }
 
 extension JSONDecoder {

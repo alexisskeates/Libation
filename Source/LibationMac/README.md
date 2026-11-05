@@ -11,7 +11,9 @@ three front ends are interchangeable. See `docs/development/native-macos-ui-plan
 - Library table with sorting, Lucene search (Libation's own syntax), cover art, liberate-status icons
 - Process queue inspector with live progress over SSE; cancel one / cancel all
 - Scan, Liberate selected / all pending, core alerts surfaced as native alerts
-- Not yet: accounts & login, settings editing, book details, series grouping, tags/ratings editing
+- Accounts window (⌘⇧A): add / rename / toggle scan / delete; Audible sign-in in a private WKWebView
+  (device user-agent, seeded cookies, `/ap/maplanding` capture) with a paste-the-URL fallback
+- Not yet: settings editing, book details, series grouping, tags/ratings editing
 
 ## Develop
 
@@ -45,12 +47,16 @@ Host stderr goes to `~/Library/Logs/Libation/LibationHost.log`; Libation's own l
 | GET | `library` · `library/{asin}` | flattened `LibraryBook` rows |
 | GET | `search?q=` | Lucene query → ASINs |
 | GET | `covers/{pictureId}?size=80\|300\|500` | JPEG, downloads on demand |
-| GET | `accounts` | id, nickname, locale, scan flag |
+| GET / POST | `accounts` | list; add `{accountId, locale, accountName?, libraryScan}` |
+| PUT / DELETE | `accounts/{id}/{locale}` | rename / toggle scan; remove |
+| POST | `accounts/{id}/{locale}/signin` | tries stored tokens, else asks the UI to sign in; result as `signin` event |
+| GET | `locales` | Audible marketplaces |
+| GET | `login` · POST `login/{id}/complete` `{responseUrl}` · POST `login/{id}/cancel` | browser sign-in handshake; session arrives as a `login` event |
 | POST / GET | `scan` | `{accounts:[...]}` optional; progress via `scan` events |
 | GET | `queue` | snapshot |
 | POST | `queue/liberate` | `{asins:[...]}` |
 | POST | `queue/cancel` · `queue/{asin}/cancel` | |
-| GET | `events` | SSE: `hello`, `queue`, `scan`, `library`, `alert`, `log` |
+| GET | `events` | SSE: `hello`, `queue`, `scan`, `library`, `alert`, `log`, `login`, `signin` |
 | POST | `shutdown` | |
 
 ## Ship

@@ -13,6 +13,11 @@ final class LibraryStore {
     var queue: QueueSnapshot = .empty
     var scan: ScanState = .idle
     var alerts: [HostAlert] = []
+    var accounts: [Account] = []
+    var locales: [LocaleInfo] = []
+    var loginSession: LoginSession?
+    var signInResults: [SignInResult] = []
+    var signingIn: Set<String> = []
     var lastError: String?
     var searchText = "" { didSet { scheduleSearch() } }
     var sortOrder: [KeyPathComparator<Book>] = [KeyPathComparator(\Book.dateAdded, order: .reverse)]
@@ -41,6 +46,9 @@ final class LibraryStore {
                 books = try await c.library()
                 queue = try await c.queue()
                 scan = try await c.scanState()
+                accounts = try await c.accounts()
+                locales = try await c.locales()
+                loginSession = try await c.pendingLogins().first
                 connection = .connected
                 NSLog("LibationMac connected to %@: %d books, %d queued", c.baseURL.absoluteString, books.count, queue.items.count)
                 listen(c)
@@ -83,12 +91,80 @@ final class LibraryStore {
             scheduleReload()
         case "alert":
             if let a = try? JSONDecoder.libation.decode(HostAlert.self, from: data) { alerts.append(a) }
+        case "login":
+            if let s = try? JSONDecoder.libation.decode(LoginSession.self, from: data) {
+                loginSession = s
+            } else if let closed = try? JSONDecoder.libation.decode(LoginClosed.self, from: data), loginSession?.id == closed.id {
+                loginSession = nil
+            }
+        case "signin":
+            if let r = try? JSONDecoder.libation.decode(SignInResult.self, from: data) {
+                signingIn.remove(r.accountId + "|" + (r.locale ?? ""))
+                signInResults.append(r)
+                Task { await reloadAccounts() }
+            }
         default:
             break
         }
     }
 
     func dismissAlert() { if !alerts.isEmpty { alerts.removeFirst() } }
+    func dismissSignInResult() { if !signInResults.isEmpty { signInResults.removeFirst() } }
+
+    private struct LoginClosed: Decodable { var id: String; var closed: Bool }
+
+    // MARK: Accounts
+
+    func reloadAccounts() async {
+        guard let client else { return }
+        do { accounts = try await client.accounts() } catch { lastError = error.localizedDescription }
+    }
+
+    func addAccount(accountId: String, locale: String, accountName: String?, libraryScan: Bool) async throws {
+        guard let client else { throw HostError.notRunning }
+        _ = try await client.addAccount(accountId: accountId, locale: locale, accountName: accountName, libraryScan: libraryScan)
+        await reloadAccounts()
+    }
+
+    func update(_ account: Account, accountName: String? = nil, libraryScan: Bool? = nil) {
+        guard let client else { return }
+        Task {
+            do { _ = try await client.updateAccount(account, accountName: accountName, libraryScan: libraryScan); await reloadAccounts() }
+            catch { lastError = error.localizedDescription }
+        }
+    }
+
+    func delete(_ account: Account) {
+        guard let client else { return }
+        Task {
+            do { try await client.deleteAccount(account); await reloadAccounts() }
+            catch { lastError = error.localizedDescription }
+        }
+    }
+
+    func signIn(_ account: Account) {
+        guard let client else { return }
+        signingIn.insert(account.id)
+        Task {
+            do { try await client.signIn(account) }
+            catch { signingIn.remove(account.id); lastError = error.localizedDescription }
+        }
+    }
+
+    func completeLogin(responseUrl: String) {
+        guard let client, let session = loginSession else { return }
+        Task {
+            do { try await client.completeLogin(session.id, responseUrl: responseUrl) }
+            catch { lastError = error.localizedDescription }
+            loginSession = nil
+        }
+    }
+
+    func cancelLogin() {
+        guard let client, let session = loginSession else { return }
+        loginSession = nil
+        Task { await client.cancelLogin(session.id) }
+    }
 
     private func scheduleReload() {
         reloadTask?.cancel()

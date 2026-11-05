@@ -85,7 +85,19 @@ public record BookDto(
 	}
 }
 
-public record AccountDto(string AccountId, string? AccountName, string? Locale, bool LibraryScan);
+public record AccountDto(string AccountId, string? AccountName, string? Locale, bool LibraryScan, IReadOnlyList<string> AdditionalLocales, bool HasTokens)
+{
+	public static AccountDto From(AudibleUtilities.Account a) => new(
+		a.AccountId, a.AccountName, a.Locale?.Name, a.LibraryScan,
+		a.AdditionalLocales.Select(l => l.Name).ToList(),
+		a.IdentityTokens?.IsValid == true);
+}
+
+public record LocaleDto(string Name, string CountryCode, bool WithUsername);
+public record AddAccountRequest(string AccountId, string Locale, string? AccountName, bool LibraryScan = true);
+public record UpdateAccountRequest(string? AccountName, bool? LibraryScan);
+public record CompleteLoginRequest(string ResponseUrl);
+public record SignInResultDto(string AccountId, string? Locale, bool Ok, string? Error);
 
 public record QueueItemDto(
 	string Asin,
